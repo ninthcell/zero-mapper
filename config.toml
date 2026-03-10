@@ -1,0 +1,77 @@
+schema_version = 1
+controller_player = 1
+nintendo_layout = true
+
+[profiles.clip_studio]
+name = "Clip Studio Paint"
+title_regex = "CLIP STUDIO PAINT|Clip Studio Paint"
+
+[profiles.clip_studio.map]
+A = "P"
+Y = "B"
+B = "E"
+X = { mode = "hold", send = "Space" }
+"LB+Y" = "I"
+DpadLeft = "Ctrl+Z"
+DpadRight = "Ctrl+Y"
+"LB+A" = "M"
+"LB+B" = "K"
+"RB+A" = "Ctrl+T"
+Start = "Ctrl+S"
+
+[profiles.photoshop]
+name = "Photoshop"
+title_regex = "Photoshop"
+
+[profiles.photoshop.map]
+A = "B"
+Y = "I"
+B = "E"
+X = { mode = "hold", send = "Space" }
+DpadLeft = "Ctrl+Z"
+DpadRight = "Ctrl+Shift+Z"
+"LB+A" = "M"
+"LB+B" = "V"
+"LB+DpadLeft" = "["
+"LB+DpadRight" = "]"
+"RB+DpadLeft" = "Ctrl+-"
+"RB+DpadRight" = "Ctrl+="
+"RB+A" = "Ctrl+T"
+"RB+B" = "X"
+Start = "Ctrl+S"
+
+[profiles.aseprite]
+name = "Aseprite"
+title_regex = "Aseprite"
+
+[profiles.aseprite.map]
+A = "B"
+B = "E"
+X = { mode = "hold", send = "Space" }
+Y = { mode = "hold", send = "Alt" }
+"LB+Y" = { mode = "hold", send = "Ctrl" }
+DpadLeft = "Ctrl+Z"
+DpadRight = "Ctrl+Y"
+"LB+A" = "M"
+"RB+X" = "Tab"
+Start = "Ctrl+S"
+
+[profiles.krita]
+name = "Krita"
+title_regex = "Krita"
+
+[profiles.krita.map]
+A = "B"
+B = "E"
+X = { mode = "hold", send = "Space" }
+Y = { mode = "hold", send = "Ctrl" }
+DpadLeft = "Ctrl+Z"
+DpadRight = "Ctrl+Shift+Z"
+"LB+A" = "Ctrl+R"
+"LB+B" = "V"
+"LB+DpadLeft" = "["
+"LB+DpadRight" = "]"
+"RB+B" = "X"
+"RB+X" = "D"
+"RB+Y" = "F5"
+Start = "Ctrl+S"
