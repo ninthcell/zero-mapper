@@ -20,6 +20,7 @@ use config::{
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::RemoteDesktop::WTSRegisterSessionNotification;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::Input::XboxController::{
     XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_BACK, XINPUT_GAMEPAD_DPAD_DOWN,
@@ -32,16 +33,15 @@ use windows::Win32::UI::Shell::{
     NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW, Shell_NotifyIconW,
     ShellExecuteW,
 };
-use windows::Win32::System::RemoteDesktop::WTSRegisterSessionNotification;
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CREATESTRUCTW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
     DestroyWindow, DispatchMessageW, EVENT_SYSTEM_FOREGROUND, GWLP_USERDATA, GetCursorPos,
     GetForegroundWindow, GetMessageW, GetWindowLongPtrW, GetWindowTextLengthW, GetWindowTextW,
-    HMENU, IDC_ARROW, KillTimer, LoadCursorW, LoadIconW, MENU_ITEM_FLAGS,
-    MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, MSG, PostMessageW, PostQuitMessage,
-    RegisterClassW, SW_SHOWNORMAL, SetForegroundWindow, SetTimer, SetWindowLongPtrW,
-    TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu, TranslateMessage, WINDOW_EX_STYLE,
-    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_APP, WM_COMMAND, WM_CREATE, WM_DESTROY,
+    HMENU, IDC_ARROW, KillTimer, LoadCursorW, LoadIconW, MENU_ITEM_FLAGS, MF_CHECKED, MF_GRAYED,
+    MF_POPUP, MF_SEPARATOR, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassW,
+    SW_SHOWNORMAL, SetForegroundWindow, SetTimer, SetWindowLongPtrW, TPM_BOTTOMALIGN,
+    TPM_LEFTALIGN, TrackPopupMenu, TranslateMessage, WINDOW_EX_STYLE, WINEVENT_OUTOFCONTEXT,
+    WINEVENT_SKIPOWNPROCESS, WM_APP, WM_COMMAND, WM_CREATE, WM_DESTROY, WM_DISPLAYCHANGE,
     WM_LBUTTONUP, WM_NCCREATE, WM_NULL, WM_POWERBROADCAST, WM_RBUTTONUP, WM_TIMER,
     WM_WTSSESSION_CHANGE, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
@@ -49,6 +49,7 @@ use windows::core::{PCWSTR, w};
 
 const WM_TRAYICON: u32 = WM_APP + 1;
 const WM_FOREGROUND_CHANGED: u32 = WM_APP + 2;
+const WM_CONFIG_CHANGED: u32 = WM_APP + 3;
 const TIMER_CONTROLLER: usize = 1;
 
 const ID_TOGGLE_ENABLE: usize = 1001;
@@ -75,6 +76,7 @@ controller_player = 1
 nintendo_layout = true
 overlay = true
 overlay_position = "bottom-right"
+overlay_opacity = 80
 
 [profiles.clip_studio]
 name = "Clip Studio Paint"
@@ -297,7 +299,11 @@ unsafe extern "system" fn window_proc(
             }
             let _ = WTSRegisterSessionNotification(hwnd, 0);
             if state.config.overlay {
-                match overlay::OverlayWindow::create(state.config.overlay_position) {
+                match overlay::OverlayWindow::create(
+                    state.config.overlay_position,
+                    state.config.overlay_opacity,
+                    state.config.nintendo_layout,
+                ) {
                     Ok(ov) => {
                         state.overlay = Some(ov);
                         state.overlay_visible = true;
@@ -307,6 +313,13 @@ unsafe extern "system" fn window_proc(
             }
             let _ = refresh_window_context(state);
             let _ = sync_controller_timer(state);
+            let _ = tick_controller(state);
+            spawn_config_watcher(hwnd, &state.config_path);
+            LRESULT(0)
+        }
+        WM_CONFIG_CHANGED => {
+            let state = get_state(hwnd);
+            handle_command(state, ID_RELOAD_CONFIG);
             LRESULT(0)
         }
         WM_COMMAND => {
@@ -331,6 +344,7 @@ unsafe extern "system" fn window_proc(
                 state.last_error = Some(format!("{err:#}"));
             }
             let _ = sync_controller_timer(state);
+            let _ = tick_controller(state);
             LRESULT(0)
         }
         WM_POWERBROADCAST => {
@@ -339,7 +353,9 @@ unsafe extern "system" fn window_proc(
                 PBT_APMSUSPEND => {
                     state.suspended = true;
                     clear_active_outputs(state);
-                    if let Some(ref mut ov) = state.overlay { ov.hide(); }
+                    if let Some(ref mut ov) = state.overlay {
+                        ov.hide();
+                    }
                     let _ = sync_controller_timer(state);
                 }
                 PBT_APMRESUMEAUTOMATIC => {
@@ -358,7 +374,9 @@ unsafe extern "system" fn window_proc(
                 WTS_SESSION_LOCK => {
                     state.suspended = true;
                     clear_active_outputs(state);
-                    if let Some(ref mut ov) = state.overlay { ov.hide(); }
+                    if let Some(ref mut ov) = state.overlay {
+                        ov.hide();
+                    }
                     let _ = sync_controller_timer(state);
                 }
                 WTS_SESSION_UNLOCK => {
@@ -368,6 +386,16 @@ unsafe extern "system" fn window_proc(
                 }
                 _ => {}
             }
+            LRESULT(0)
+        }
+        WM_DISPLAYCHANGE => {
+            let state = get_state(hwnd);
+            if let Some(ref mut ov) = state.overlay {
+                let _ = ov.reposition();
+            }
+            let _ = refresh_window_context(state);
+            let _ = sync_controller_timer(state);
+            let _ = tick_controller(state);
             LRESULT(0)
         }
         WM_TRAYICON => {
@@ -419,12 +447,17 @@ unsafe fn handle_command(state: &mut AppState, command_id: usize) {
                 state.config = config;
                 state.last_error = None;
                 clear_active_outputs(state);
+                state.pressed_buttons.clear();
                 if let Some(ref mut ov) = state.overlay {
                     ov.destroy();
                     state.overlay = None;
                 }
                 if state.config.overlay {
-                    match overlay::OverlayWindow::create(state.config.overlay_position) {
+                    match overlay::OverlayWindow::create(
+                        state.config.overlay_position,
+                        state.config.overlay_opacity,
+                        state.config.nintendo_layout,
+                    ) {
                         Ok(ov) => {
                             state.overlay = Some(ov);
                             state.overlay_visible = true;
@@ -432,7 +465,17 @@ unsafe fn handle_command(state: &mut AppState, command_id: usize) {
                         Err(err) => report_error(state, "Overlay creation failed", &err),
                     }
                 }
+                // Re-match the foreground window. If it doesn't match (e.g. editor
+                // is still foreground during auto-reload), fall back to the last
+                // known match so the timer keeps running.
                 let _ = refresh_window_context(state);
+                if state.active_profile_index.is_none() {
+                    if let Some(prev) = state.last_matched_profile_index {
+                        if prev < state.config.profiles.len() {
+                            state.active_profile_index = Some(prev);
+                        }
+                    }
+                }
                 let _ = sync_controller_timer(state);
             }
             Err(err) => report_error(state, "Reload config failed", &err),
@@ -474,13 +517,17 @@ unsafe fn handle_command(state: &mut AppState, command_id: usize) {
 unsafe fn tick_controller(state: &mut AppState) -> Result<()> {
     if !state.enabled || state.in_menu {
         clear_active_outputs(state);
-        if let Some(ref mut ov) = state.overlay { ov.hide(); }
+        if let Some(ref mut ov) = state.overlay {
+            ov.hide();
+        }
         return Ok(());
     }
 
     let Some(profile_index) = state.active_profile_index else {
         clear_active_outputs(state);
-        if let Some(ref mut ov) = state.overlay { ov.hide(); }
+        if let Some(ref mut ov) = state.overlay {
+            ov.hide();
+        }
         return Ok(());
     };
 
@@ -495,7 +542,16 @@ unsafe fn tick_controller(state: &mut AppState) -> Result<()> {
             sync_controller_timer(state)?;
         }
         clear_active_outputs(state);
-        if let Some(ref mut ov) = state.overlay { ov.hide(); }
+        if let Some(ref mut ov) = state.overlay {
+            if state.overlay_visible {
+                let profile_data = state
+                    .config
+                    .profiles
+                    .get(profile_index)
+                    .map(|p| (profile_index, p));
+                ov.update(&state.pressed_buttons, profile_data, false);
+            }
+        }
         return Ok(());
     }
     if !state.controller_connected {
@@ -556,8 +612,12 @@ unsafe fn tick_controller(state: &mut AppState) -> Result<()> {
 
     if let Some(ref mut ov) = state.overlay {
         if state.overlay_visible {
-            let profile_data = state.config.profiles.get(profile_index).map(|p| (profile_index, p));
-            ov.update(&state.pressed_buttons, profile_data);
+            let profile_data = state
+                .config
+                .profiles
+                .get(profile_index)
+                .map(|p| (profile_index, p));
+            ov.update(&state.pressed_buttons, profile_data, true);
             ov.show();
         }
     }
@@ -593,7 +653,13 @@ unsafe fn refresh_window_context(state: &mut AppState) -> Result<()> {
     }
 
     if let Some(ref mut ov) = state.overlay {
-        if state.active_profile_index.is_some() && state.overlay_visible {
+        if let (Some(idx), true) = (state.active_profile_index, state.overlay_visible) {
+            let profile_data = state.config.profiles.get(idx).map(|p| (idx, p));
+            ov.update(
+                &state.pressed_buttons,
+                profile_data,
+                state.controller_connected,
+            );
             ov.show();
         } else {
             ov.hide();
@@ -643,10 +709,7 @@ unsafe fn show_context_menu(state: &mut AppState) -> Result<()> {
     };
     let status_label = format!(
         "Status: {} | P{} {} | timer {}",
-        status_parts[0],
-        state.config.controller_player,
-        status_parts[1],
-        timer_info,
+        status_parts[0], state.config.controller_player, status_parts[1], timer_info,
     );
     append_text_item(menu, 0, &status_label, MF_STRING | MF_GRAYED)?;
 
@@ -1008,6 +1071,49 @@ fn copy_wide_into_buf(text: &str, buffer: &mut [u16]) {
     if len == buffer.len() {
         buffer[buffer.len() - 1] = 0;
     }
+}
+
+fn spawn_config_watcher(hwnd: HWND, config_path: &PathBuf) {
+    use windows::Win32::Storage::FileSystem::{
+        FILE_NOTIFY_CHANGE_LAST_WRITE, FindFirstChangeNotificationW, FindNextChangeNotification,
+    };
+    use windows::Win32::System::Threading::WaitForSingleObject;
+
+    let dir = config_path.parent().unwrap_or(config_path).to_path_buf();
+    let file_name = config_path.file_name().unwrap_or_default().to_os_string();
+    let hwnd_raw = hwnd.0 as isize;
+
+    std::thread::spawn(move || unsafe {
+        let dir_wide = wide_null(&dir.display().to_string());
+        let handle = FindFirstChangeNotificationW(
+            PCWSTR(dir_wide.as_ptr()),
+            false,
+            FILE_NOTIFY_CHANGE_LAST_WRITE,
+        );
+        let Ok(handle) = handle else { return };
+
+        // Track mtime to avoid spurious notifications
+        let mut last_mtime = std::fs::metadata(dir.join(&file_name))
+            .and_then(|m| m.modified())
+            .ok();
+
+        loop {
+            let _ = WaitForSingleObject(handle, u32::MAX);
+            // Delay for editors that write in multiple steps (truncate+write)
+            std::thread::sleep(std::time::Duration::from_millis(300));
+
+            let current_mtime = std::fs::metadata(dir.join(&file_name))
+                .and_then(|m| m.modified())
+                .ok();
+            if current_mtime != last_mtime {
+                last_mtime = current_mtime;
+                let hwnd = HWND(hwnd_raw as *mut _);
+                let _ = PostMessageW(hwnd, WM_CONFIG_CHANGED, WPARAM(0), LPARAM(0));
+            }
+
+            let _ = FindNextChangeNotification(handle);
+        }
+    });
 }
 
 fn wide_null(value: &str) -> Vec<u16> {

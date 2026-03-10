@@ -76,6 +76,7 @@ pub struct CompiledConfig {
     pub nintendo_layout: bool,
     pub overlay: bool,
     pub overlay_position: OverlayPosition,
+    pub overlay_opacity: u8,
     pub profiles: Vec<CompiledProfile>,
 }
 
@@ -102,6 +103,7 @@ struct RawConfig {
     nintendo_layout: Option<bool>,
     overlay: Option<bool>,
     overlay_position: Option<OverlayPosition>,
+    overlay_opacity: Option<u8>,
     profiles: IndexMap<String, RawProfile>,
 }
 
@@ -217,6 +219,7 @@ pub fn parse_config(source: &str) -> Result<CompiledConfig> {
         nintendo_layout: raw.nintendo_layout.unwrap_or(false),
         overlay: raw.overlay.unwrap_or(false),
         overlay_position: raw.overlay_position.unwrap_or_default(),
+        overlay_opacity: raw.overlay_opacity.unwrap_or(80).min(100),
         profiles,
     })
 }

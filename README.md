@@ -18,6 +18,7 @@
 - 앱 전환 시 프로필 자동 전환 — 창 제목 기반으로 즉시 감지
 - **버튼 조합** — `LB+A`, `RB+DpadLeft` 같은 조합을 하나의 키보드 단축키에 매핑. 버튼이 적은 소형 컨트롤러에서도 수십 개의 단축키를 커버
 - 탭/홀드 두 가지 출력 모드
+- **오버레이 HUD** — 화면 구석에 반투명 오버레이로 현재 매핑과 누른 버튼을 실시간 표시
 
 ---
 
@@ -158,6 +159,23 @@ X = { mode = "hold", send = "Space" } # 홀드: X 누르고 있는 동안 Space 
 ### 지원 키
 
 `A`–`Z`, `0`–`9`, `F1`–`F24`, `Ctrl`, `Alt`, `Shift`, `Win`, `Enter`, `Esc`, `Space`, `Tab`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`, `CapsLock`, `[` `]` `\` `-` `=` `,` `.` `/` `;` `'`
+
+---
+
+## 오버레이 HUD
+
+화면 구석에 반투명 오버레이를 띄워 현재 프로필의 버튼 매핑을 보여줍니다.
+
+- 각 버튼 옆에 매핑된 키보드 단축키 표시
+- 누른 버튼 실시간 하이라이트
+- 버튼 하나를 홀드하면 해당 버튼의 조합 매핑으로 자동 전환 (예: LB 홀드 → LB+A, LB+B 등의 매핑 표시)
+- 트레이 메뉴에서 표시/숨김 토글 가능
+
+```toml
+overlay = true                     # 오버레이 활성화 (기본값: false)
+overlay_position = "bottom-right"  # top-left / top-right / bottom-left / bottom-right
+overlay_opacity = 80               # 투명도 0~100 (기본값: 80)
+```
 
 ---
 

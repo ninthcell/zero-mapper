@@ -18,6 +18,7 @@ Background apps shouldn't waste resources when idle. ZeroMapper slows polling to
 - Automatic profile switching based on the foreground window title
 - **Button combos** — map combos like `LB+A`, `RB+DpadLeft` to a single keyboard shortcut. Cover dozens of shortcuts even on tiny controllers
 - Tap and hold output modes
+- **Overlay HUD** — semi-transparent on-screen overlay showing current mappings and pressed buttons in real time
 
 ---
 
@@ -158,6 +159,23 @@ X = { mode = "hold", send = "Space" } # Hold: keep Space held while X is held
 ### Supported keys
 
 `A`–`Z`, `0`–`9`, `F1`–`F24`, `Ctrl`, `Alt`, `Shift`, `Win`, `Enter`, `Esc`, `Space`, `Tab`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `Up`, `Down`, `Left`, `Right`, `CapsLock`, `[` `]` `\` `-` `=` `,` `.` `/` `;` `'`
+
+---
+
+## Overlay HUD
+
+A semi-transparent overlay in the corner of the screen showing button mappings for the active profile.
+
+- Displays the mapped keyboard shortcut next to each button
+- Real-time highlight of pressed buttons
+- Hold a single button to see its combo mappings (e.g., hold LB → shows LB+A, LB+B mappings)
+- Toggle visibility from the tray menu
+
+```toml
+overlay = true                     # Enable overlay (default: false)
+overlay_position = "bottom-right"  # top-left / top-right / bottom-left / bottom-right
+overlay_opacity = 80               # Opacity 0–100 (default: 80)
+```
 
 ---
 

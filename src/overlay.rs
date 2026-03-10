@@ -31,17 +31,19 @@ const BTN_W: i32 = 38;
 const BTN_H: i32 = 28;
 const BTN_GAP: i32 = 3;
 const LABEL_H: i32 = 14;
-const BG_ALPHA: u8 = 200;
 
 pub struct OverlayWindow {
     hwnd: HWND,
     visible: bool,
     position: OverlayPosition,
+    alpha: u8,
+    nintendo_layout: bool,
     font_button: HFONT,
     font_label: HFONT,
     font_profile: HFONT,
     prev_buttons: BTreeSet<PadButton>,
     prev_profile_index: Option<usize>,
+    prev_connected: bool,
 }
 
 struct ButtonSlot {
@@ -51,7 +53,7 @@ struct ButtonSlot {
 }
 
 impl OverlayWindow {
-    pub unsafe fn create(position: OverlayPosition) -> Result<Self> {
+    pub unsafe fn create(position: OverlayPosition, opacity_pct: u8, nintendo_layout: bool) -> Result<Self> {
         let hinstance = GetModuleHandleW(None)?;
         let class_name = crate::wide_null(OVERLAY_CLASS);
 
@@ -83,15 +85,19 @@ impl OverlayWindow {
         let font_label = create_font(-11, true);
         let font_profile = create_font(-10, false);
 
+        let alpha = (opacity_pct.min(100) as u16 * 255 / 100) as u8;
         let mut overlay = Self {
             hwnd,
             visible: false,
             position,
+            alpha,
+            nintendo_layout,
             font_button,
             font_label,
             font_profile,
             prev_buttons: BTreeSet::new(),
             prev_profile_index: None,
+            prev_connected: false,
         };
         overlay.reposition()?;
         Ok(overlay)
@@ -125,22 +131,27 @@ impl OverlayWindow {
         &mut self,
         pressed: &BTreeSet<PadButton>,
         profile: Option<(usize, &CompiledProfile)>,
+        connected: bool,
     ) {
         let profile_index = profile.as_ref().map(|(i, _)| *i);
-        if *pressed == self.prev_buttons && profile_index == self.prev_profile_index {
+        if *pressed == self.prev_buttons
+            && profile_index == self.prev_profile_index
+            && connected == self.prev_connected
+        {
             return;
         }
         self.prev_buttons.clone_from(pressed);
         self.prev_profile_index = profile_index;
+        self.prev_connected = connected;
 
         let Some((_, prof)) = profile else {
             return;
         };
 
-        self.render(pressed, prof);
+        self.render(pressed, prof, connected);
     }
 
-    unsafe fn reposition(&mut self) -> Result<()> {
+    pub unsafe fn reposition(&mut self) -> Result<()> {
         let mut work_area = RECT::default();
         let _ = SystemParametersInfoW(
             SPI_GETWORKAREA,
@@ -180,7 +191,7 @@ impl OverlayWindow {
         Ok(())
     }
 
-    unsafe fn render(&self, pressed: &BTreeSet<PadButton>, profile: &CompiledProfile) {
+    unsafe fn render(&self, pressed: &BTreeSet<PadButton>, profile: &CompiledProfile, connected: bool) {
         let width = OVERLAY_WIDTH;
         let height = OVERLAY_HEIGHT;
 
@@ -206,7 +217,7 @@ impl OverlayWindow {
 
         let pixels =
             std::slice::from_raw_parts_mut(bits as *mut u32, (width * height) as usize);
-        let bg_color = premultiply_argb(BG_ALPHA, 0x10, 0x10, 0x18);
+        let bg_color = premultiply_argb(self.alpha, 0x10, 0x10, 0x18);
         pixels.fill(bg_color);
 
         SetBkMode(hdc_mem, TRANSPARENT);
@@ -217,7 +228,7 @@ impl OverlayWindow {
             None
         };
 
-        let layout = button_layout();
+        let layout = button_layout(self.nintendo_layout);
         for slot in &layout {
             let is_pressed = pressed.contains(&slot.button);
             let is_modifier = modifier == Some(slot.button);
@@ -237,25 +248,25 @@ impl OverlayWindow {
 
             let (bg, text_color, label_color) = if is_modifier {
                 (
-                    premultiply_argb(BG_ALPHA, 0x2a, 0x4a, 0x8a),
+                    premultiply_argb(self.alpha, 0x2a, 0x4a, 0x8a),
                     0x00FFBB88u32,
                     0x00000000u32,
                 )
             } else if is_pressed {
                 (
-                    premultiply_argb(BG_ALPHA, 0x3a, 0x6a, 0xba),
+                    premultiply_argb(self.alpha, 0x3a, 0x6a, 0xba),
                     0x00FFFFFFu32,
                     0x00FFFFFFu32,
                 )
             } else if is_dimmed {
                 (
-                    premultiply_argb(BG_ALPHA, 0x22, 0x22, 0x22),
+                    premultiply_argb(self.alpha, 0x22, 0x22, 0x22),
                     0x00555555u32,
                     0x00000000u32,
                 )
             } else {
                 (
-                    premultiply_argb(BG_ALPHA, 0x33, 0x33, 0x33),
+                    premultiply_argb(self.alpha, 0x33, 0x33, 0x33),
                     0x00AAAAAAu32,
                     0x00FFAA66u32,
                 )
@@ -265,9 +276,9 @@ impl OverlayWindow {
 
             if is_modifier || is_pressed {
                 let border = if is_modifier {
-                    premultiply_argb(BG_ALPHA, 0x55, 0x88, 0xcc)
+                    premultiply_argb(self.alpha, 0x55, 0x88, 0xcc)
                 } else {
-                    premultiply_argb(BG_ALPHA, 0x77, 0xaa, 0xff)
+                    premultiply_argb(self.alpha, 0x77, 0xaa, 0xff)
                 };
                 draw_rect_border(pixels, width, height, slot.x, slot.y, BTN_W, BTN_H, border);
             }
@@ -292,6 +303,10 @@ impl OverlayWindow {
         }
 
         SelectObject(hdc_mem, self.font_profile);
+        if !connected {
+            SetTextColor(hdc_mem, COLORREF(0x003344AA));
+            draw_text_centered(hdc_mem, "No controller", 0, height - 34, width, 14);
+        }
         SetTextColor(hdc_mem, COLORREF(0x00555555));
         draw_text_centered(hdc_mem, &profile.name, 0, height - 20, width, 16);
 
@@ -359,10 +374,18 @@ unsafe fn delete_font(font: &mut HFONT) {
     }
 }
 
-fn button_layout() -> Vec<ButtonSlot> {
+fn button_layout(nintendo_layout: bool) -> Vec<ButtonSlot> {
     let dpad_cx = 80;
     let face_cx = 240;
     let row_top = 55;
+
+    // Nintendo: [X] top, [Y] left, [A] right, [B] bottom
+    // Xbox:     [Y] top, [X] left, [B] right, [A] bottom
+    let (top, left, right, bottom) = if nintendo_layout {
+        (PadButton::X, PadButton::Y, PadButton::A, PadButton::B)
+    } else {
+        (PadButton::Y, PadButton::X, PadButton::B, PadButton::A)
+    };
 
     vec![
         ButtonSlot { button: PadButton::Lb, x: dpad_cx - BTN_W / 2, y: 6 },
@@ -371,10 +394,10 @@ fn button_layout() -> Vec<ButtonSlot> {
         ButtonSlot { button: PadButton::DpadLeft, x: dpad_cx - BTN_W - BTN_W / 2 - BTN_GAP, y: row_top + BTN_H + BTN_GAP },
         ButtonSlot { button: PadButton::DpadRight, x: dpad_cx + BTN_W / 2 + BTN_GAP, y: row_top + BTN_H + BTN_GAP },
         ButtonSlot { button: PadButton::DpadDown, x: dpad_cx - BTN_W / 2, y: row_top + 2 * (BTN_H + BTN_GAP) },
-        ButtonSlot { button: PadButton::X, x: face_cx - BTN_W / 2, y: row_top },
-        ButtonSlot { button: PadButton::Y, x: face_cx - BTN_W - BTN_W / 2 - BTN_GAP, y: row_top + BTN_H + BTN_GAP },
-        ButtonSlot { button: PadButton::A, x: face_cx + BTN_W / 2 + BTN_GAP, y: row_top + BTN_H + BTN_GAP },
-        ButtonSlot { button: PadButton::B, x: face_cx - BTN_W / 2, y: row_top + 2 * (BTN_H + BTN_GAP) },
+        ButtonSlot { button: top, x: face_cx - BTN_W / 2, y: row_top },
+        ButtonSlot { button: left, x: face_cx - BTN_W - BTN_W / 2 - BTN_GAP, y: row_top + BTN_H + BTN_GAP },
+        ButtonSlot { button: right, x: face_cx + BTN_W / 2 + BTN_GAP, y: row_top + BTN_H + BTN_GAP },
+        ButtonSlot { button: bottom, x: face_cx - BTN_W / 2, y: row_top + 2 * (BTN_H + BTN_GAP) },
         ButtonSlot { button: PadButton::Start, x: (OVERLAY_WIDTH - BTN_W) / 2, y: row_top + 3 * (BTN_H + BTN_GAP) + LABEL_H + 4 },
     ]
 }
