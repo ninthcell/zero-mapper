@@ -4,6 +4,7 @@
 mod config;
 mod input;
 mod mapper;
+mod overlay;
 mod startup;
 
 use std::collections::{BTreeSet, HashMap};
@@ -55,6 +56,7 @@ const ID_TOGGLE_STARTUP: usize = 1002;
 const ID_RELOAD_CONFIG: usize = 1003;
 const ID_OPEN_CONFIG: usize = 1004;
 const ID_EXIT: usize = 1005;
+const ID_TOGGLE_OVERLAY: usize = 1006;
 const ID_PLAYER_BASE: usize = 1100;
 const POLL_INTERVAL_ACTIVE_MS: u32 = 16;
 const POLL_INTERVAL_IDLE_MS: u32 = 150;
@@ -71,6 +73,8 @@ static FOREGROUND_TARGET_HWND: AtomicIsize = AtomicIsize::new(0);
 const SAMPLE_CONFIG: &str = r#"schema_version = 1
 controller_player = 1
 nintendo_layout = true
+overlay = true
+overlay_position = "bottom-right"
 
 [profiles.clip_studio]
 name = "Clip Studio Paint"
@@ -171,6 +175,8 @@ struct AppState {
     suspended: bool,
     in_menu: bool,
     foreground_hook: HWINEVENTHOOK,
+    overlay: Option<overlay::OverlayWindow>,
+    overlay_visible: bool,
 }
 
 fn main() {
@@ -239,6 +245,8 @@ unsafe fn run() -> Result<()> {
         suspended: false,
         in_menu: false,
         foreground_hook: HWINEVENTHOOK::default(),
+        overlay: None,
+        overlay_visible: false,
     });
 
     let _hwnd = CreateWindowExW(
@@ -288,6 +296,15 @@ unsafe extern "system" fn window_proc(
                 report_error(state, "Foreground hook failed", &err);
             }
             let _ = WTSRegisterSessionNotification(hwnd, 0);
+            if state.config.overlay {
+                match overlay::OverlayWindow::create(state.config.overlay_position) {
+                    Ok(ov) => {
+                        state.overlay = Some(ov);
+                        state.overlay_visible = true;
+                    }
+                    Err(err) => report_error(state, "Overlay creation failed", &err),
+                }
+            }
             let _ = refresh_window_context(state);
             let _ = sync_controller_timer(state);
             LRESULT(0)
@@ -322,6 +339,7 @@ unsafe extern "system" fn window_proc(
                 PBT_APMSUSPEND => {
                     state.suspended = true;
                     clear_active_outputs(state);
+                    if let Some(ref mut ov) = state.overlay { ov.hide(); }
                     let _ = sync_controller_timer(state);
                 }
                 PBT_APMRESUMEAUTOMATIC => {
@@ -340,6 +358,7 @@ unsafe extern "system" fn window_proc(
                 WTS_SESSION_LOCK => {
                     state.suspended = true;
                     clear_active_outputs(state);
+                    if let Some(ref mut ov) = state.overlay { ov.hide(); }
                     let _ = sync_controller_timer(state);
                 }
                 WTS_SESSION_UNLOCK => {
@@ -367,6 +386,9 @@ unsafe extern "system" fn window_proc(
                     let _ = KillTimer(state.hwnd, TIMER_CONTROLLER);
                 }
                 uninstall_foreground_hook(&mut state);
+                if let Some(ref mut ov) = state.overlay {
+                    ov.destroy();
+                }
                 let _ = input::release_all(&mut state.held_key_refs);
                 let _ = delete_tray_icon(state.hwnd);
             }
@@ -397,6 +419,19 @@ unsafe fn handle_command(state: &mut AppState, command_id: usize) {
                 state.config = config;
                 state.last_error = None;
                 clear_active_outputs(state);
+                if let Some(ref mut ov) = state.overlay {
+                    ov.destroy();
+                    state.overlay = None;
+                }
+                if state.config.overlay {
+                    match overlay::OverlayWindow::create(state.config.overlay_position) {
+                        Ok(ov) => {
+                            state.overlay = Some(ov);
+                            state.overlay_visible = true;
+                        }
+                        Err(err) => report_error(state, "Overlay creation failed", &err),
+                    }
+                }
                 let _ = refresh_window_context(state);
                 let _ = sync_controller_timer(state);
             }
@@ -412,6 +447,16 @@ unsafe fn handle_command(state: &mut AppState, command_id: usize) {
                 PCWSTR::null(),
                 SW_SHOWNORMAL,
             );
+        }
+        ID_TOGGLE_OVERLAY => {
+            state.overlay_visible = !state.overlay_visible;
+            if let Some(ref mut ov) = state.overlay {
+                if state.overlay_visible {
+                    ov.show();
+                } else {
+                    ov.hide();
+                }
+            }
         }
         ID_EXIT => {
             let _ = DestroyWindow(state.hwnd);
@@ -429,11 +474,13 @@ unsafe fn handle_command(state: &mut AppState, command_id: usize) {
 unsafe fn tick_controller(state: &mut AppState) -> Result<()> {
     if !state.enabled || state.in_menu {
         clear_active_outputs(state);
+        if let Some(ref mut ov) = state.overlay { ov.hide(); }
         return Ok(());
     }
 
     let Some(profile_index) = state.active_profile_index else {
         clear_active_outputs(state);
+        if let Some(ref mut ov) = state.overlay { ov.hide(); }
         return Ok(());
     };
 
@@ -448,6 +495,7 @@ unsafe fn tick_controller(state: &mut AppState) -> Result<()> {
             sync_controller_timer(state)?;
         }
         clear_active_outputs(state);
+        if let Some(ref mut ov) = state.overlay { ov.hide(); }
         return Ok(());
     }
     if !state.controller_connected {
@@ -506,6 +554,14 @@ unsafe fn tick_controller(state: &mut AppState) -> Result<()> {
         .active_mapping_ids
         .extend(state.scratch_mapping_ids.iter().copied());
 
+    if let Some(ref mut ov) = state.overlay {
+        if state.overlay_visible {
+            let profile_data = state.config.profiles.get(profile_index).map(|p| (profile_index, p));
+            ov.update(&state.pressed_buttons, profile_data);
+            ov.show();
+        }
+    }
+
     if !had_input && !was_idle {
         if let Some(tick) = state.last_input_tick {
             if tick.elapsed().as_millis() >= IDLE_THRESHOLD {
@@ -534,6 +590,14 @@ unsafe fn refresh_window_context(state: &mut AppState) -> Result<()> {
 
     if state.active_profile_index != previous_profile {
         clear_active_outputs(state);
+    }
+
+    if let Some(ref mut ov) = state.overlay {
+        if state.active_profile_index.is_some() && state.overlay_visible {
+            ov.show();
+        } else {
+            ov.hide();
+        }
     }
 
     Ok(())
@@ -616,6 +680,14 @@ unsafe fn show_context_menu(state: &mut AppState) -> Result<()> {
 
     AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null())?;
     append_text_item(menu, ID_TOGGLE_ENABLE, enabled_label, MF_STRING)?;
+    if state.overlay.is_some() {
+        let overlay_label = if state.overlay_visible {
+            "Hide overlay"
+        } else {
+            "Show overlay"
+        };
+        append_text_item(menu, ID_TOGGLE_OVERLAY, overlay_label, MF_STRING)?;
+    }
 
     for player in 1..=4usize {
         let flags = if state.config.controller_player as usize == player {

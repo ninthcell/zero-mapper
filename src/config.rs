@@ -60,10 +60,22 @@ pub enum OutputMode {
     Hold,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum OverlayPosition {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    #[default]
+    BottomRight,
+}
+
 #[derive(Clone, Debug)]
 pub struct CompiledConfig {
     pub controller_player: u32,
     pub nintendo_layout: bool,
+    pub overlay: bool,
+    pub overlay_position: OverlayPosition,
     pub profiles: Vec<CompiledProfile>,
 }
 
@@ -88,6 +100,8 @@ struct RawConfig {
     schema_version: Option<u32>,
     controller_player: Option<u32>,
     nintendo_layout: Option<bool>,
+    overlay: Option<bool>,
+    overlay_position: Option<OverlayPosition>,
     profiles: IndexMap<String, RawProfile>,
 }
 
@@ -201,6 +215,8 @@ pub fn parse_config(source: &str) -> Result<CompiledConfig> {
     Ok(CompiledConfig {
         controller_player,
         nintendo_layout: raw.nintendo_layout.unwrap_or(false),
+        overlay: raw.overlay.unwrap_or(false),
+        overlay_position: raw.overlay_position.unwrap_or_default(),
         profiles,
     })
 }

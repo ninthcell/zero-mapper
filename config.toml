@@ -1,6 +1,8 @@
 schema_version = 1
 controller_player = 1
 nintendo_layout = true
+overlay = true
+overlay_position = "bottom-right"
 
 [profiles.clip_studio]
 name = "Clip Studio Paint"
