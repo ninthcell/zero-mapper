@@ -62,6 +62,7 @@ const ID_PLAYER_BASE: usize = 1100;
 const POLL_INTERVAL_ACTIVE_MS: u32 = 16;
 const POLL_INTERVAL_IDLE_MS: u32 = 150;
 const POLL_INTERVAL_DISCONNECTED_MS: u32 = 1000;
+const POLL_INTERVAL_BACKGROUND_MS: u32 = 500;
 const IDLE_THRESHOLD: u128 = 1000;
 
 const PBT_APMSUSPEND: u32 = 0x0004;
@@ -515,6 +516,13 @@ unsafe fn handle_command(state: &mut AppState, command_id: usize) {
 }
 
 unsafe fn tick_controller(state: &mut AppState) -> Result<()> {
+    // Safety net: re-check foreground window in case hook missed a change
+    let fg_title = window_title(GetForegroundWindow());
+    if fg_title != state.current_title {
+        refresh_window_context(state)?;
+        sync_controller_timer(state)?;
+    }
+
     if !state.enabled || state.in_menu {
         clear_active_outputs(state);
         if let Some(ref mut ov) = state.overlay {
@@ -650,6 +658,10 @@ unsafe fn refresh_window_context(state: &mut AppState) -> Result<()> {
 
     if state.active_profile_index != previous_profile {
         clear_active_outputs(state);
+        if state.active_profile_index.is_some() {
+            // Boost polling to active rate (16ms) for immediate responsiveness
+            state.last_input_tick = Some(Instant::now());
+        }
     }
 
     if let Some(ref mut ov) = state.overlay {
@@ -1024,8 +1036,12 @@ unsafe fn sync_controller_timer(state: &mut AppState) -> Result<()> {
 }
 
 fn desired_controller_interval(state: &AppState) -> Option<u32> {
-    if !state.enabled || state.active_profile_index.is_none() || state.suspended {
+    if state.suspended {
         return None;
+    }
+
+    if !state.enabled || state.active_profile_index.is_none() {
+        return Some(POLL_INTERVAL_BACKGROUND_MS);
     }
 
     if !state.controller_connected {

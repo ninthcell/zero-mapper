@@ -134,7 +134,7 @@ The bundled `config.toml` includes profiles for Clip Studio Paint, Photoshop, As
 
 ## Customization
 
-Open `config.toml` via tray menu → "Open config.toml", edit it, then click "Reload config". No restart needed.
+Open `config.toml` via tray menu → "Open config.toml" and edit it. Changes are applied automatically on save. You can also manually reload via tray menu → "Reload config".
 
 ```toml
 schema_version = 1
@@ -169,6 +169,7 @@ A semi-transparent overlay in the corner of the screen showing button mappings f
 - Displays the mapped keyboard shortcut next to each button
 - Real-time highlight of pressed buttons
 - Hold a single button to see its combo mappings (e.g., hold LB → shows LB+A, LB+B mappings)
+- Shows "No controller" status when controller is disconnected
 - Toggle visibility from the tray menu
 
 ```toml
