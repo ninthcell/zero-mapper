@@ -6,6 +6,8 @@ A lightweight Windows tray app that turns compact controllers like the 8BitDo Ze
 
 It detects the active window and automatically switches button mappings per app — Clip Studio, Photoshop, Krita, and more.
 
+<video src="https://github.com/user-attachments/assets/9e17446c-73cf-4b7a-b0ac-685888d883c0" autoplay loop muted playsinline></video>
+
 ---
 
 ## Why ZeroMapper

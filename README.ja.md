@@ -6,6 +6,8 @@
 
 アクティブなウィンドウを自動認識し、アプリごとにボタンマッピングを切り替えます。クリップスタジオではブラシ/消しゴム/元に戻す、Photoshopに切り替えると自動でPhotoshop用のショートカットに変わります。
 
+<video src="https://github.com/user-attachments/assets/9e17446c-73cf-4b7a-b0ac-685888d883c0" autoplay loop muted playsinline></video>
+
 ---
 
 ## ZeroMapperの特徴

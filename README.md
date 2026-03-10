@@ -6,6 +6,8 @@
 
 포커스된 앱을 자동으로 감지해서 앱마다 다른 버튼 매핑을 적용합니다. 클립스튜디오에서는 브러시/지우개/실행취소, 포토샵으로 전환하면 자동으로 포토샵 단축키로 바뀝니다.
 
+<video src="https://github.com/user-attachments/assets/9e17446c-73cf-4b7a-b0ac-685888d883c0" autoplay loop muted playsinline></video>
+
 ---
 
 ## 왜 ZeroMapper인가
