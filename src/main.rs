@@ -761,6 +761,20 @@ unsafe fn poll_controller_buttons(
     if (raw & XINPUT_GAMEPAD_DPAD_RIGHT).0 != 0 {
         buttons.insert(PadButton::DpadRight);
     }
+    // Some compact controllers (8BitDo Zero 2, etc.) report Dpad as left stick
+    const STICK_DPAD_THRESHOLD: i16 = 16384;
+    if gamepad.sThumbLY > STICK_DPAD_THRESHOLD {
+        buttons.insert(PadButton::DpadUp);
+    }
+    if gamepad.sThumbLY < -STICK_DPAD_THRESHOLD {
+        buttons.insert(PadButton::DpadDown);
+    }
+    if gamepad.sThumbLX < -STICK_DPAD_THRESHOLD {
+        buttons.insert(PadButton::DpadLeft);
+    }
+    if gamepad.sThumbLX > STICK_DPAD_THRESHOLD {
+        buttons.insert(PadButton::DpadRight);
+    }
     if gamepad.bLeftTrigger >= trigger_threshold {
         buttons.insert(PadButton::Lt);
     }
