@@ -2,6 +2,8 @@
 
 [한국어](README.md) | **English** | [日本語](README.ja.md)
 
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/ninthcell)
+
 A lightweight Windows tray app that turns compact controllers like the 8BitDo Zero or 8BitDo Micro into a **shortcut pad for digital art**.
 
 It detects the active window and automatically switches button mappings per app — Clip Studio, Photoshop, Krita, and more.

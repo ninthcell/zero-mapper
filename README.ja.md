@@ -2,6 +2,8 @@
 
 [한국어](README.md) | [English](README.en.md) | **日本語**
 
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/ninthcell)
+
 8BitDo ZeroやMicroのような小型コントローラーを、**お絵描き用ショートカットパッド**に変えるWindows常駐アプリです。
 
 アクティブなウィンドウを自動認識し、アプリごとにボタンマッピングを切り替えます。クリップスタジオではブラシ/消しゴム/元に戻す、Photoshopに切り替えると自動でPhotoshop用のショートカットに変わります。

@@ -2,6 +2,8 @@
 
 **한국어** | [English](README.en.md) | [日本語](README.ja.md)
 
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/ninthcell)
+
 8BitDo Zero, 8BitDo Micro 같은 소형 컨트롤러를 **그림 작업용 단축키 패드**로 만들어주는 Windows 트레이 앱.
 
 포커스된 앱을 자동으로 감지해서 앱마다 다른 버튼 매핑을 적용합니다. 클립스튜디오에서는 브러시/지우개/실행취소, 포토샵으로 전환하면 자동으로 포토샵 단축키로 바뀝니다.
